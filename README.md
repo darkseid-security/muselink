@@ -569,8 +569,8 @@ For issues, questions, or feature requests, please:
 - **OpenAI** - GPT models
 - **Google** - Gemini AI
 - **AIML API** - Unified AI API platform
-- **Anthropic** - Claude AI models
 
 ---
+
 
 
