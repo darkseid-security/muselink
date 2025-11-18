@@ -559,7 +559,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 For issues, questions, or feature requests, please:
 - Open an issue on GitHub
 - Check the troubleshooting section above
-- Review the inline documentation in `CLAUDE.md`
 
 ## Acknowledgments
 
@@ -571,6 +570,7 @@ For issues, questions, or feature requests, please:
 - **AIML API** - Unified AI API platform
 
 ---
+
 
 
 
