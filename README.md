@@ -573,4 +573,4 @@ For issues, questions, or feature requests, please:
 
 ---
 
-**Made with ❤️ for creative professionals**
+
