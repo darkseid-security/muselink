@@ -1,0 +1,50 @@
+# Core Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic[email]==2.5.0
+python-multipart==0.0.6
+websockets==12.0  # For WebSocket support (video calling)
+jinja2==3.1.2  # For template rendering
+
+# Database
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.43  # SQL query builder with automatic parameterization
+
+# Security & Authentication
+argon2-cffi==23.1.0
+python-dotenv==1.0.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+pyjwt==2.8.0
+pyotp==2.9.0
+qrcode[pil]==7.4.2
+cryptography==41.0.7
+authlib==1.3.0  # OAuth2 authentication (Google, etc.)
+
+# File Validation & Security
+python-magic==0.4.27
+Pillow==10.2.0
+
+# Rate Limiting & Caching
+slowapi==0.1.9
+redis==5.0.1
+hiredis==2.3.2  # Optional: Faster Redis performance
+
+# Email
+aiosmtplib==3.0.1
+email-validator==2.1.0
+
+# AI/LLM Integration
+openai==1.3.7
+anthropic==0.7.7
+google-generativeai==0.8.3  # Google Gemini Pro 2.5 for AI assistant
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+httpx==0.25.2
+
+# Development
+black==23.12.0
+flake8==6.1.0
+mypy==1.7.1
