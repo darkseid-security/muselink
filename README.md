@@ -64,7 +64,6 @@ A security-hardened FastAPI application for AI-powered creative content generati
 **AI Integration:**
 - OpenAI GPT-4/GPT-5 (via aimlapi.com)
 - Google Gemini Pro 2.5
-- Anthropic Claude
 - Flux AI (image generation)
 - Kling AI (video generation)
 - ElevenLabs (voice generation)
@@ -570,6 +569,7 @@ For issues, questions, or feature requests, please:
 - **AIML API** - Unified AI API platform
 
 ---
+
 
 
 
