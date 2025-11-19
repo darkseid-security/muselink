@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+</html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MuseLink Authentication</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/auth.css">
+
+
+</head>
+
+<body>
+    <div class="aurora-background">
+        <div class="aurora-dot"></div>
+        <div class="aurora-dot"></div>
+        <div class="aurora-dot"></div>
+    </div>
+
+    <div class="auth-page-wrapper">
+        <div class="auth-container">
+            <div class="auth-visual-panel">
+                <div class="visual-orb-container">
+                    <div id="auth-orb"></div>
+                </div>
+            </div>
+
+            <div class="auth-form-panel">
+                <!-- Flash Messages -->
+                <div id="flash-container" style="margin-bottom: 1rem;"></div>
+
+                <!-- Login Form -->
+                <div class="auth-card" id="login-card">
+                    <div class="auth-header">
+                        <a href="#" class="logo">MuseLink</a>
+                        <h1>Welcome Back</h1>
+                        <p>Sign in to continue your creative journey.</p>
+                    </div>
+
+                    <form class="auth-form" action="/login" method="POST">
+                        <div class="form-group">
+                            <label for="login-username">Username</label>
+                            <div class="input-wrapper">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                                    class="input-icon">
+                                    <path
+                                        d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.095a1.23 1.23 0 00.41-1.412A9.99 9.99 0 0010 12c-2.31 0-4.438.784-6.131 2.095z" />
+                                </svg>
+                                <input type="text" id="login-username" name="username" placeholder="Enter your username"
+                                    required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="login-password">Password</label>
+                            <div class="input-wrapper">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                                    class="input-icon">
+                                    <path fill-rule="evenodd"
+                                        d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z"
+                                        clip-rule="evenodd" />
+                                </svg>
+                                <input type="password" id="login-password" name="password"
+                                    placeholder="Enter your password" required minlength="14">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-full">Sign In</button>
+                    </form>
+                    <div class="auth-divider"><span>OR</span></div>
+                    <div class="social-logins">
+                        <button class="btn btn-social"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                viewBox="0 0 48 48">
+                                <path fill="#FFC107"
+                                    d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z">
+                                </path>
+                                <path fill="#FF3D00"
+                                    d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z">
+                                </path>
+                                <path fill="#4CAF50"
+                                    d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.222,0-9.658-3.356-11.303-7.962l-6.571,4.819C9.656,39.663,16.318,44,24,44z">
+                                </path>
+                                <path fill="#1976D2"
+                                    d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C44.577,34.131,48,27.455,48,20C48,16.038,46.125,12.23,43.611,20.083z">
+                                </path>
+                            </svg><span>Sign in with Google</span></button>
+                    </div>
+                    <div class="auth-footer">
+                        <p>Don't have an account? <a href="#" class="auth-link" data-action="show-signup">Sign Up</a>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Signup Form -->
+                <div class="auth-card" id="signup-card">
+                    <div class="auth-header">
+                        <a href="#" class="logo">Genesis</a>
+                        <h1>Create Your Account</h1>
+                        <p>Start your journey into AI-powered creativity.</p>
+                    </div>
+                    <form class="auth-form" action="/register" method="POST">
+                        <div class="form-row">
+                            <div class="form-group"><label for="first_name">First Name</label>
+                                <div class="input-wrapper"><input type="text" id="first_name" name="first_name"
+                                        placeholder="John" required></div>
+                            </div>
+                            <div class="form-group"><label for="last_name">Last Name</label>
+                                <div class="input-wrapper"><input type="text" id="last_name" name="last_name"
+                                        placeholder="Doe" required></div>
+                            </div>
+                        </div>
+                        <div class="form-group"><label for="username">Username</label>
+                            <div class="input-wrapper"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"
+                                    fill="currentColor" class="input-icon">
+                                    <path
+                                        d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.095a1.23 1.23 0 00.41-1.412A9.99 9.99 0 0010 12c-2.31 0-4.438.784-6.131 2.095z" />
+                                </svg><input type="text" id="username" name="username" placeholder="johndoe" required>
+                            </div>
+                        </div>
+                        <div class="form-group"><label for="email">Email</label>
+                            <div class="input-wrapper"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"
+                                    fill="currentColor" class="input-icon">
+                                    <path
+                                        d="M3 4a2 2 0 00-2 2v1.161l8.441 4.221a1.25 1.25 0 001.118 0L19 7.162V6a2 2 0 00-2-2H3z" />
+                                    <path
+                                        d="M19 8.839l-7.77 3.885a2.75 2.75 0 01-2.46 0L1 8.839V14a2 2 0 002 2h14a2 2 0 002-2V8.839z" />
+                                </svg><input type="email" id="email" name="email" placeholder="you@example.com"
+                                    required></div>
+                        </div>
+                        <div class="form-group"><label for="password">Password</label>
+                            <div class="input-wrapper"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"
+                                    fill="currentColor" class="input-icon">
+                                    <path fill-rule="evenodd"
+                                        d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z"
+                                        clip-rule="evenodd" />
+                                </svg><input type="password" id="password" name="password"
+                                    placeholder="Min 14 chars, uppercase, lowercase, number, special char" required minlength="14"></div>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-full">Create Account</button>
+                    </form>
+                    <div class="auth-divider"><span>OR</span></div>
+                    <div class="social-logins"><button class="btn btn-social"><svg xmlns="http://www.w3.org/2000/svg"
+                                width="24" height="24" viewBox="0 0 48 48">
+                                <path fill="#FFC107"
+                                    d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z">
+                                </path>
+                                <path fill="#FF3D00"
+                                    d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z">
+                                </path>
+                                <path fill="#4CAF50"
+                                    d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.222,0-9.658-3.356-11.303-7.962l-6.571,4.819C9.656,39.663,16.318,44,24,44z">
+                                </path>
+                                <path fill="#1976D2"
+                                    d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C44.577,34.131,48,27.455,48,20C48,16.038,46.125,12.23,43.611,20.083z">
+                                </path>
+                            </svg><span>Sign up with Google</span></button></div>
+                    <div class="auth-footer">
+                        <p>Already have an account? <a href="#" class="auth-link" data-action="show-login">Sign In</a>
+                        </p>
+                    </div>
+                </div>
+
+                <!--  forget Form -->
+                <div class="auth-card" id="forgot-card">
+                    <div class="auth-header">
+                        <a href="#" class="logo">Genesis</a>
+                        <h1>Forgot Password?</h1>
+                        <p>No worries, we'll send you reset instructions.</p>
+                    </div>
+                    <form class="auth-form" id="forgot-form">
+                        <div class="form-group"><label for="forgot-email">Email</label>
+                            <div class="input-wrapper"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"
+                                    fill="currentColor" class="input-icon">
+                                    <path
+                                        d="M3 4a2 2 0 00-2 2v1.161l8.441 4.221a1.25 1.25 0 001.118 0L19 7.162V6a2 2 0 00-2-2H3z" />
+                                    <path
+                                        d="M19 8.839l-7.77 3.885a2.75 2.75 0 01-2.46 0L1 8.839V14a2 2 0 002 2h14a2 2 0 002-2V8.839z" />
+                                </svg><input type="email" id="forgot-email" name="email" placeholder="you@example.com"
+                                    required></div>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-full">Send Reset Link</button>
+                    </form>
+                    <div class="auth-footer">
+                        <p><a href="#" class="auth-link" data-action="show-login">← Back to Sign In</a></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Flash message system
+            function showFlashMessage(message, type = 'error') {
+                const flashContainer = document.getElementById('flash-container');
+                if (!flashContainer) return;
+
+                // Create flash message element
+                const flashDiv = document.createElement('div');
+                flashDiv.className = `flash-message flash-${type}`;
+                flashDiv.style.cssText = `
+                    padding: 1rem;
+                    margin-bottom: 1rem;
+                    border-radius: 8px;
+                    font-size: 0.9rem;
+                    animation: slideIn 0.3s ease-out;
+                `;
+
+                if (type === 'error') {
+                    flashDiv.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+                    flashDiv.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+                    flashDiv.style.color = '#ef4444';
+                } else if (type === 'success') {
+                    flashDiv.style.backgroundColor = 'rgba(34, 197, 94, 0.1)';
+                    flashDiv.style.border = '1px solid rgba(34, 197, 94, 0.3)';
+                    flashDiv.style.color = '#22c55e';
+                } else if (type === 'warning') {
+                    flashDiv.style.backgroundColor = 'rgba(251, 191, 36, 0.1)';
+                    flashDiv.style.border = '1px solid rgba(251, 191, 36, 0.3)';
+                    flashDiv.style.color = '#fbbf24';
+                }
+
+                flashDiv.textContent = message;
+
+                // Clear existing messages
+                flashContainer.innerHTML = '';
+                flashContainer.appendChild(flashDiv);
+
+                // Auto-remove after 5 seconds
+                setTimeout(() => {
+                    flashDiv.style.animation = 'slideOut 0.3s ease-in';
+                    setTimeout(() => flashDiv.remove(), 300);
+                }, 5000);
+            }
+
+            // Add CSS animations
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes slideIn {
+                    from {
+                        opacity: 0;
+                        transform: translateY(-10px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
+                }
+                @keyframes slideOut {
+                    from {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
+                    to {
+                        opacity: 0;
+                        transform: translateY(-10px);
+                    }
+                }
+            `;
+            document.head.appendChild(style);
+
+            // Orb Animation Generator
+            const orb = document.getElementById('auth-orb');
+            if (orb) {
+                const rings = 12;
+                for (let i = 0; i < rings; i++) {
+                    const ring = document.createElement('div');
+                    ring.className = 'orb-ring';
+                    const angle = (i / rings) * 180;
+                    const color = `color-mix(in srgb, var(--accent-start) ${100 - i * 6}%, var(--accent-end))`;
+                    ring.style.transform = `rotateY(${angle}deg) scale(${1 - Math.sin(angle * Math.PI / 180) * 0.2})`;
+                    ring.style.borderColor = color;
+                    orb.appendChild(ring);
+                }
+            }
+
+            // Form switching functionality
+            function showForm(formId) {
+                const allCards = document.querySelectorAll('.auth-card');
+                allCards.forEach(card => card.classList.remove('is-active'));
+                const activeCard = document.getElementById(formId);
+                if (activeCard) activeCard.classList.add('is-active');
+            }
+
+            // Handle form switching links
+            document.querySelectorAll('[data-action]').forEach(link => {
+                link.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    const action = this.dataset.action;
+                    if (action === 'show-login') showForm('login-card');
+                    if (action === 'show-signup') showForm('signup-card');
+                    if (action === 'show-forgot') showForm('forgot-card');
+                });
+            });
+
+            // Check if redirected from index page with specific form
+            const authForm = sessionStorage.getItem('authForm');
+            if (authForm === 'signup') {
+                showForm('signup-card');
+                sessionStorage.removeItem('authForm');
+            } else if (authForm === 'login') {
+                showForm('login-card');
+                sessionStorage.removeItem('authForm');
+            } else {
+                // Show login form by default
+                showForm('login-card');
+            }
+
+            // Generate random token (32+ characters)
+            function generateToken() {
+                return 'bypass-token-' + Date.now() + '-' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+            }
+
+            // Handle registration form submission
+            const registerForm = document.querySelector('form[action="/register"]');
+            if (registerForm) {
+                registerForm.addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    
+                    const formData = new FormData(this);
+                    const data = {
+                        email: formData.get('email'),
+                        username: formData.get('username'),
+                        password: formData.get('password'),
+                        first_name: formData.get('first_name') || null,
+                        last_name: formData.get('last_name') || null,
+                        captcha_token: generateToken(),
+                        captcha_input: '000000'
+                    };
+
+                    try {
+                        const response = await fetch('/auth/register', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(data)
+                        });
+
+                        const result = await response.json();
+
+                        if (response.ok) {
+                            showFlashMessage('Registration successful! Please check your email for verification.', 'success');
+                            setTimeout(() => showForm('login-card'), 2000);
+                        } else {
+                            // Handle validation errors (422 status)
+                            if (response.status === 422 && result.details) {
+                                // New format: { error: "Validation failed", details: [{field, message}] }
+                                const errorMessages = result.details.map(err => err.message).join('. ');
+                                showFlashMessage(errorMessages, 'error');
+                            } else if (result.error) {
+                                // Standard error format
+                                let errorMsg = result.error;
+
+                                // Handle specific error messages
+                                if (errorMsg.includes('User already exists')) {
+                                    errorMsg = 'This email or username is already registered. Please try again with different credentials.';
+                                } else if (errorMsg.includes('Email already registered')) {
+                                    errorMsg = 'This email is already registered. Please use a different email or try logging in.';
+                                }
+
+                                showFlashMessage(errorMsg, 'error');
+                            } else {
+                                // Fallback to detail field
+                                const errorMsg = result.detail || 'Registration failed. Please try again.';
+                                showFlashMessage(errorMsg, 'error');
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Registration error:', error);
+                        showFlashMessage('An error occurred during registration. Please try again.', 'error');
+                    }
+                });
+            }
+
+            // Handle login form submission
+            const loginForm = document.querySelector('form[action="/login"]');
+            if (loginForm) {
+                loginForm.addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    
+                    const formData = new FormData(this);
+                    const data = {
+                        username: formData.get('username'),
+                        password: formData.get('password'),
+                        captcha_token: generateToken(),
+                        captcha_input: '000000'
+                    };
+
+                    try {
+                        const response = await fetch('/auth/login', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(data)
+                        });
+
+                        const result = await response.json();
+
+                        if (response.ok) {
+                            if (result.mfa_required) {
+                                // SECURE: Temporary MFA session token is set as HTTP-only cookie
+                                // by server - NOT accessible to JavaScript (XSS protection)
+                                // NO client-side token storage needed
+
+                                // Redirect to 2FA verification page
+                                window.location.href = '/2fa_verify';
+                            } else {
+                                // Successful login - server sets HTTP-only cookie
+                                // NO client-side token storage (security best practice)
+                                // Session is managed entirely server-side
+
+                                // Redirect immediately without showing success message
+                                window.location.href = '/dashboard';
+                            }
+                        } else {
+                            // Handle validation errors (422 status)
+                            if (response.status === 422 && result.details) {
+                                const errorMessages = result.details.map(err => err.message).join('. ');
+                                showFlashMessage(errorMessages, 'error');
+                            } else {
+                                // Handle HTTP exception errors
+                                let errorMsg = result.error || result.detail || 'Login failed. Please try again.';
+
+                                // User-friendly error messages
+                                if (errorMsg.includes('Invalid credentials')) {
+                                    errorMsg = 'Invalid username or password. Please try again.';
+                                } else if (errorMsg.includes('Account temporarily locked')) {
+                                    errorMsg = 'Too many failed attempts. Your account is temporarily locked.';
+                                } else if (errorMsg.includes('Account is not active')) {
+                                    errorMsg = 'Your account is not active. Please contact support.';
+                                } else if (errorMsg.includes('verify your email')) {
+                                    errorMsg = 'Please verify your email address before logging in.';
+                                }
+
+                                showFlashMessage(errorMsg, 'error');
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Login error:', error);
+                        showFlashMessage('An error occurred during login. Please try again.', 'error');
+                    }
+                });
+            }
+
+            // Handle Google OAuth button clicks
+            const googleButtons = document.querySelectorAll('.btn-social');
+            googleButtons.forEach(button => {
+                button.addEventListener('click', async function(e) {
+                    e.preventDefault();
+
+                    try {
+                        // Show loading state
+                        const originalText = this.innerHTML;
+                        this.disabled = true;
+                        this.innerHTML = '<span>Redirecting to Google...</span>';
+
+                        // Redirect to Google OAuth login endpoint
+                        window.location.href = '/auth/google/login';
+                    } catch (error) {
+                        console.error('Google OAuth error:', error);
+                        showFlashMessage('Failed to initiate Google authentication. Please try again.', 'error');
+                        this.disabled = false;
+                        this.innerHTML = originalText;
+                    }
+                });
+            });
+
+            // Handle OAuth error messages in URL (e.g., from callback redirect)
+            const urlParams = new URLSearchParams(window.location.search);
+            const oauthError = urlParams.get('error');
+            const oauthMessage = urlParams.get('message');
+
+            if (oauthError && oauthMessage) {
+                showFlashMessage(decodeURIComponent(oauthMessage), 'error');
+                // Clean URL without reloading page
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        });
+    </script>
+
+</body>
+
+</html>

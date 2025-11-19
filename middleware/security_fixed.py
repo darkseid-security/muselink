@@ -1,0 +1,686 @@
+"""
+middleware/security.py
+Advanced security middleware implementing defense-in-depth
+"""
+
+from fastapi import Request, HTTPException, status
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response, JSONResponse
+import re
+import logging
+from typing import Optional
+import secrets
+import os
+from database.connection import get_db_connection, return_db_connection
+from utils.audit import log_audit_event
+from utils.input_sanitizer import (
+    comprehensive_input_scan,
+    log_malicious_input,
+    MaliciousInputDetected
+)
+from utils.security_monitor import (
+    track_idor_attempt,
+    track_rate_limit_violation
+)
+
+logger = logging.getLogger(__name__)
+
+# Environment-aware security settings
+IS_PRODUCTION = os.getenv("ENV", "development").lower() == "production"
+
+# Dangerous patterns for input validation
+DANGEROUS_PATTERNS = [
+    # SQL Injection patterns
+    r"(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE)\b)",
+    r"(--|;|\/\*|\*\/|xp_|sp_)",
+    r"(\bUNION\b.*\bSELECT\b)",
+    
+    # XSS patterns
+    r"(<script[^>]*>.*?<\/script>)",
+    r"(javascript:)",
+    r"(on\w+\s*=)",
+    r"(<iframe|<object|<embed)",
+    
+    # Command injection
+    r"(&&|\|\||;|\||`)",
+    r"(\$\(|\$\{)",
+    
+    # Path traversal
+    r"(\.\.\/|\.\.\\)",
+    
+    # SSRF attempts (IP:port patterns)
+    r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+)",
+    r"(localhost:\d+|127\.0\.0\.1:\d+)",
+    r"(\[[:0-9a-fA-F]+\]:\d+)",  # IPv6 with port
+    
+    # Template injection
+    r"(\{\{|\}\}|\{%|%\})",
+    
+    # XXE patterns
+    r"(<!ENTITY|<!DOCTYPE|SYSTEM|PUBLIC)",
+]
+
+# Compile patterns for performance
+COMPILED_PATTERNS = [re.compile(pattern, re.IGNORECASE) for pattern in DANGEROUS_PATTERNS]
+
+# Blocked file extensions
+DANGEROUS_EXTENSIONS = [
+    '.exe', '.bat', '.cmd', '.sh', '.ps1', '.vbs', '.js', '.jar',
+    '.msi', '.app', '.deb', '.rpm', '.dmg', '.pkg'
+]
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """
+    Implements comprehensive security headers
+    - CSP, HSTS, X-Frame-Options, etc.
+    """
+    
+    async def dispatch(self, request: Request, call_next):
+        # Skip middleware for static files
+            if request.url.path.startswith("/static"):
+            return await call_next(request)
+            
+            response = await call_next(request)
+        
+            # Content Security Policy (strict)
+            response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; "
+            "img-src 'self' data: blob: https:; "
+            "media-src 'self' https://cdn.aimlapi.com blob:; "
+            "font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; "
+            "connect-src 'self' https://cdn.aimlapi.com; "
+            "frame-src 'self' blob:; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self'"
+            )
+        
+            # HSTS - Force HTTPS for 1 year
+            response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains; preload"
+            )
+        
+            # Prevent clickjacking
+            response.headers["X-Frame-Options"] = "DENY"
+        
+            # Prevent MIME sniffing
+            response.headers["X-Content-Type-Options"] = "nosniff"
+        
+            # Enable XSS filtering
+            response.headers["X-XSS-Protection"] = "1; mode=block"
+        
+            # Referrer policy
+            response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        
+            # Permissions policy (formerly Feature-Policy)
+            # Allow camera/microphone for video calling (self origin only)
+            response.headers["Permissions-Policy"] = (
+            "geolocation=(), microphone=(self), camera=(self), "
+            "payment=(), usb=(), magnetometer=(), gyroscope=()"
+            )
+        
+            # Remove server identification
+            if "Server" in response.headers:
+            del response.headers["Server"]
+            if "X-Powered-By" in response.headers:
+            del response.headers["X-Powered-By"]
+        
+            # Add cache control for sensitive endpoints
+            if "/auth/" in request.url.path or "/admin/" in request.url.path:
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+            response.headers["Pragma"] = "no-cache"
+        
+            return response
+
+class InputValidationMiddleware(BaseHTTPMiddleware):
+    """
+    Validates all incoming requests for malicious patterns
+    Implements defense against injection attacks, XSS, SSRF, etc.
+    Logs intrusion attempts to security_incidents table
+
+    Detection capabilities:
+    - SQL Injection (UNION, OR, AND, SQL functions)
+    - XSS (script tags, event handlers, iframes)
+    - Command Injection (shell metacharacters)
+    - Path Traversal (../, ..\\)
+    - LDAP Injection
+    - XXE (XML External Entity)
+    - SSRF (internal IPs, localhost)
+    - SSTI (Server-Side Template Injection)
+    - NoSQL Injection ($where, $ne, $regex)
+    """
+
+    def _log_intrusion_attempt(self, request: Request, attack_type: str, details: dict):
+        """Log intrusion attempt to security_incidents and audit_logs tables"""
+        try:
+            ip_address = request.client.host if request.client else None
+
+            log_malicious_input(
+                user_id=None,  # No user_id for unauthenticated attacks
+                input_value=details.get('sample', 'N/A'),
+                attack_type=attack_type,
+                pattern=details.get('pattern', 'N/A'),
+                ip_address=ip_address,
+                endpoint=request.url.path
+            )
+
+            # Also log to audit_logs for backward compatibility
+            try:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+
+                log_audit_event(
+                    cursor,
+                    None,
+                    'intrusion_attempt',
+                    'failed',
+                    ip_address,
+                    {
+                        'attack_type': attack_type,
+                        'path': request.url.path,
+                        'method': request.method,
+                        **details
+                    }
+                )
+
+                conn.commit()
+                return_db_connection(conn)
+            except Exception as audit_error:
+                logger.error(f"Failed to log to audit_logs: {audit_error}")
+
+        except Exception as e:
+            logger.error(f"Failed to log intrusion attempt: {e}")
+
+    async def dispatch(self, request: Request, call_next):
+        try:
+            # Skip validation for health check
+            if request.url.path == "/health":
+                return await call_next(request)
+
+            # Validate request method
+            if request.method not in ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]:
+                logger.warning(f"Blocked request with invalid method: {request.method}")
+                self._log_intrusion_attempt(request, "invalid_method", {"method": request.method})
+                raise HTTPException(
+                    status_code=status.HTTP_405_METHOD_NOT_ALLOWED,
+                    detail="Method not allowed"
+                )
+
+            # Validate and sanitize query parameters using comprehensive scanner
+            for key, value in request.query_params.items():
+                is_malicious, attack_type, pattern = comprehensive_input_scan(str(value))
+                if is_malicious:
+                    logger.warning(f"Blocked request with malicious query parameter: {key} ({attack_type})")
+                    self._log_intrusion_attempt(request, attack_type, {
+                        "parameter": key,
+                        "pattern": pattern,
+                        "sample": str(value)[:100]
+                    })
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Invalid request parameters detected"
+                    )
+
+            # NOTE: We do NOT scan URL paths for SQL keywords because REST APIs commonly use
+            # verbs like "create", "update", "delete" which trigger false positives.
+            # Path traversal attacks are caught by checking for "../" patterns in query params and body.
+
+            # Whitelist for endpoints that should skip body validation
+            # - Auth endpoints: passwords contain special chars
+            # - Flowchart endpoints: Mermaid syntax contains special characters that trigger false positives
+            BODY_VALIDATION_WHITELIST = [
+            "/auth/register",
+            "/auth/login",
+            "/auth/mfa/verify",
+            "/auth/password-reset",
+            "/auth/password-reset/confirm",
+            "/user/change-password",
+            "/api/v1/flowcharts/create",
+            "/api/v1/flowcharts/",  # Covers /api/v1/flowcharts/{id} for PUT
+            "/api/v1/ideas/generate-image",  # Image generation accepts natural language prompts
+            "/api/v1/ideas/generate-gpt5",  # GPT-5 generation accepts natural language prompts
+            "/api/v1/ideas/generate-voice",  # Voice generation accepts natural language text
+            "/api/v1/ideas/generate-video",  # Video generation accepts natural language prompts
+            "/api/v1/creative/generate",  # Creative content generation
+            "/api/v1/ideas",  # Creating ideas with prompts
+            "/api/v1/messages/send",  # Messages can contain natural language
+            ]
+        
+            skip_body_validation = any(request.url.path.startswith(path) for path in BODY_VALIDATION_WHITELIST)
+        
+            # For POST/PUT/PATCH, validate body (if JSON)
+            if request.method in ["POST", "PUT", "PATCH"]:
+            content_type = request.headers.get("content-type", "")
+            
+            # Check content type
+            if content_type and "application/json" in content_type:
+                try:
+                    body = await request.body()
+                    body_str = body.decode("utf-8")
+                    
+                    # Check body size (prevent DoS)
+                    if len(body_str) > 1_000_000:  # 1MB limit
+                        logger.warning("Blocked request with oversized body")
+                        self._log_intrusion_attempt(request, "oversized_request", {
+                            "body_size": len(body_str)
+                        })
+                        raise HTTPException(
+                            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                            detail="Request body too large"
+                        )
+
+                    # Skip body validation for whitelisted auth endpoints (passwords have special chars)
+                    if not skip_body_validation:
+                        # Validate body content using comprehensive scanner
+                        is_malicious, attack_type, pattern = comprehensive_input_scan(body_str)
+                        if is_malicious:
+                            logger.warning(f"Blocked request with malicious body content ({attack_type})")
+                            self._log_intrusion_attempt(request, attack_type, {
+                                "pattern": pattern,
+                                "sample": body_str[:200],
+                                "body_length": len(body_str),
+                                "content_type": content_type
+                            })
+                            
+                            # User-friendly error messages
+                            error_messages = {
+                                "control_characters": "Invalid characters detected. Please remove any control characters from your input.",
+                                "sql_injection": "Invalid input detected. Please avoid using SQL keywords or special patterns.",
+                                "xss": "Invalid input detected. HTML tags and scripts are not allowed.",
+                                "command_injection": "Invalid input detected. Command patterns are not allowed.",
+                                "path_traversal": "Invalid path detected. Path traversal attempts are not allowed.",
+                                "xxe_injection": "Invalid XML content detected.",
+                                "ssrf": "Invalid URL or IP address detected.",
+                                "ssti": "Invalid template syntax detected.",
+                                "nosql_injection": "Invalid query syntax detected.",
+                            }
+                            
+                            detail_message = error_messages.get(attack_type, "Invalid input detected. Please check your data.")
+                            
+                            raise HTTPException(
+                                status_code=status.HTTP_400_BAD_REQUEST,
+                                detail=detail_message
+                            )
+                    
+                    # Recreate request with body
+    async def receive():
+                        return {"type": "http.request", "body": body}
+                    
+                    request._receive = receive
+
+                except HTTPException:
+                    # Re-raise HTTPException as-is (don't wrap it)
+                    raise
+                except Exception as e:
+                    logger.error(f"Error validating request body: {type(e).__name__}")
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Invalid request"
+                    )
+        
+        # Validate User-Agent (block if missing or suspicious)
+        user_agent = request.headers.get("user-agent", "")
+        if not user_agent or len(user_agent) > 500:
+            logger.warning("Blocked request with invalid User-Agent")
+            self._log_intrusion_attempt(request, "invalid_user_agent", {
+                "user_agent_length": len(user_agent) if user_agent else 0
+            })
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid request headers"
+            )
+        
+            # Proceed with request
+            response = await call_next(request)
+            return response
+
+        except HTTPException as e:
+            # Convert HTTPException to JSON response
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=e.status_code,
+                content={"detail": e.detail}
+            )
+    
+    def _contains_dangerous_pattern(self, text: str) -> bool:
+        """Check if text contains any dangerous patterns"""
+        if not text:
+            return False
+        
+        # Check against compiled patterns
+        for pattern in COMPILED_PATTERNS:
+            if pattern.search(text):
+                return True
+        
+        return False
+
+class HostHeaderValidationMiddleware(BaseHTTPMiddleware):
+    """
+    Validate Host header to prevent Host Header Injection attacks
+
+    Prevents:
+    - Cache poisoning via Host header manipulation
+    - Password reset poisoning (critical for email verification)
+    - Email injection via Host header
+    - Open redirect vulnerabilities
+
+    NOTE: In development mode, automatically allows private IP ranges (10.x.x.x, 192.168.x.x, 172.16-31.x.x)
+    In production, strict enforcement applies only to endpoints that generate emails.
+    """
+
+    def __init__(self, app, allowed_hosts: list = None):
+        super().__init__(app)
+        self.allowed_hosts = allowed_hosts or ["localhost", "127.0.0.1"]
+
+    def _is_private_ip(self, hostname: str) -> bool:
+        """Check if hostname is a private IP address (RFC 1918)"""
+        try:
+            # Check for private IP ranges
+            if hostname.startswith("10."):  # 10.0.0.0/8
+                return True
+            if hostname.startswith("192.168."):  # 192.168.0.0/16
+                return True
+            if hostname.startswith("172."):  # 172.16.0.0/12
+                parts = hostname.split(".")
+                if len(parts) >= 2:
+                    second_octet = int(parts[1])
+                    if 16 <= second_octet <= 31:
+                        return True
+            return False
+        except (ValueError, IndexError):
+            return False
+
+    async def dispatch(self, request: Request, call_next):
+        host_header = request.headers.get("host", "")
+
+            if not host_header:
+            logger.warning("Request blocked: missing Host header")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Host header required"
+            )
+
+            # Extract hostname (remove port if present)
+            hostname = host_header.split(':')[0].lower()
+
+            # Allow common development hosts automatically
+            dev_hosts = ["localhost", "127.0.0.1", "0.0.0.0"]
+
+            # Combine allowed hosts with dev hosts
+            all_allowed_hosts = [h.lower() for h in self.allowed_hosts] + dev_hosts
+
+            # Check if hostname is allowed
+            is_allowed = hostname in all_allowed_hosts
+
+            # In development mode, also allow private IP ranges (for mobile/local network access)
+            if not IS_PRODUCTION and not is_allowed:
+            is_allowed = self._is_private_ip(hostname)
+            if is_allowed:
+                logger.debug(f"Allowing private IP in development mode: {hostname}")
+
+            # Check against whitelist
+            if not is_allowed:
+            logger.warning(f"Request blocked: invalid Host header '{host_header}'")
+
+            # Log intrusion attempt
+            try:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                ip_address = request.client.host if request.client else None
+
+                log_audit_event(
+                    cursor,
+                    None,
+                    'host_header_injection_attempt',
+                    'failed',
+                    ip_address,
+                    {
+                        'host_header': host_header,
+                        'path': request.url.path,
+                        'method': request.method
+                    }
+                )
+
+                conn.commit()
+                return_db_connection(conn)
+            except Exception as e:
+                logger.error(f"Failed to log host header injection: {e}")
+
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid Host header"
+            )
+
+            # Validate X-Forwarded-Host if present (proxy scenarios)
+            forwarded_host = request.headers.get("x-forwarded-host", "")
+            if forwarded_host:
+            forwarded_hostname = forwarded_host.split(':')[0].lower()
+
+            # Apply same rules as main host header
+            is_forwarded_allowed = forwarded_hostname in all_allowed_hosts
+            if not IS_PRODUCTION and not is_forwarded_allowed:
+                is_forwarded_allowed = self._is_private_ip(forwarded_hostname)
+
+            if not is_forwarded_allowed:
+                logger.warning(f"Request blocked: invalid X-Forwarded-Host '{forwarded_host}'")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid X-Forwarded-Host header"
+                )
+
+            response = await call_next(request)
+            return response
+
+
+class CSRFProtectionMiddleware(BaseHTTPMiddleware):
+    """
+    CSRF Protection using double-submit cookie pattern
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        # Skip CSRF for WebSocket connections (they use their own auth)
+            # WebSocket connections have an Upgrade header
+            upgrade_header = request.headers.get("upgrade", "").lower()
+            logger.info(f"[CSRF Middleware] Path: {request.url.path}, Upgrade header: {upgrade_header}")
+
+            if upgrade_header == "websocket":
+            logger.info("[CSRF Middleware] WebSocket detected - SKIPPING CSRF CHECK")
+            return await call_next(request)
+
+            # Skip CSRF for GET, HEAD, OPTIONS
+            if request.method in ["GET", "HEAD", "OPTIONS"]:
+            response = await call_next(request)
+
+            # Set CSRF token cookie on GET requests
+            if "csrf_token" not in request.cookies:
+                csrf_token = secrets.token_urlsafe(32)
+
+                response.set_cookie(
+                    key="csrf_token",
+                    value=csrf_token,
+                    httponly=False,  # Must be False so JavaScript can read it for double-submit pattern
+                    secure=IS_PRODUCTION,  # HTTPS required in production, allow HTTP in development
+                    samesite="strict",  # Strict mode for CSRF protection
+                    max_age=3600
+                )
+
+            return response
+
+            # Exempt auth endpoints from CSRF (they have rate limiting + other protections)
+            # Users don't have CSRF tokens before authentication
+            csrf_exempt_paths = [
+            "/auth/login",
+            "/auth/register",
+            "/auth/verify-email",
+            "/auth/password-reset",
+            "/auth/mfa/verify",
+            "/api/v1/ws/"  # WebSocket endpoints
+            ]
+
+            if any(request.url.path.startswith(path) for path in csrf_exempt_paths):
+            response = await call_next(request)
+            return response
+
+            # For state-changing methods, validate CSRF token
+            csrf_cookie = request.cookies.get("csrf_token")
+            csrf_header = request.headers.get("X-CSRF-Token")
+
+            if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
+            logger.warning(
+                f"CSRF token validation failed - "
+                f"Cookie: {'present' if csrf_cookie else 'MISSING'}, "
+                f"Header: {'present' if csrf_header else 'MISSING'}, "
+                f"Match: {csrf_cookie == csrf_header if csrf_cookie and csrf_header else 'N/A'}"
+            )
+            # Return JSONResponse directly instead of raising HTTPException
+            # (HTTPException in middleware doesn't get properly converted)
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"detail": "CSRF validation failed"}
+            )
+
+            response = await call_next(request)
+            return response
+
+    def validate_file_upload(filename: str, content_type: str) -> bool:
+    """
+    Validate file uploads for security
+    """
+    # Check file extension
+    if any(filename.lower().endswith(ext) for ext in DANGEROUS_EXTENSIONS):
+        logger.warning(f"Blocked dangerous file upload: {filename}")
+        return False
+    
+    # Validate content type
+    allowed_types = [
+        "application/json",
+        "text/plain",
+        "text/csv",
+        "application/pdf",
+        "image/jpeg",
+        "image/png",
+        "image/gif"
+    ]
+    
+    if content_type not in allowed_types:
+        logger.warning(f"Blocked file with invalid content type: {content_type}")
+        return False
+    
+    return True
+
+    def sanitize_filename(filename: str) -> str:
+    """
+    Sanitize filename to prevent path traversal
+    """
+    # Remove path separators and dangerous characters
+    filename = re.sub(r'[^\w\-_\.]', '_', filename)
+    # Remove multiple dots
+    filename = re.sub(r'\.+', '.', filename)
+    # Ensure filename is not empty
+    if not filename or filename == '.':
+        filename = f"file_{secrets.token_hex(8)}"
+
+    return filename
+
+
+class SecurityMonitoringMiddleware(BaseHTTPMiddleware):
+    """
+    Monitors responses for security events and triggers alerts
+
+    Tracks:
+    - 404 responses (potential IDOR probing)
+    - 429 responses (rate limit violations)
+    - Patterns of suspicious behavior
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        """Monitor response and track security events"""
+
+            # Get user info if authenticated
+            user_id = None
+            ip_address = request.client.host if request.client else None
+
+            # Try to extract user_id from session (if authenticated)
+            auth_header = request.headers.get("authorization", "")
+            if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+            try:
+                from utils.security import verify_session_token
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                user_id = verify_session_token(cursor, token)
+                return_db_connection(conn)
+            except:
+                pass  # Not authenticated or invalid token
+
+            # Process request
+            response = await call_next(request)
+
+            # Track 404 responses on resource endpoints (potential IDOR probing)
+            if response.status_code == 404:
+            # Check if this is a resource endpoint (has ID in path)
+            path = request.url.path
+
+            # Pattern: /api/v1/{resource}/{id}
+            resource_patterns = [
+                (r'/api/v1/messages/(\d+)', 'message'),
+                (r'/api/v1/files/(\d+)', 'file'),
+                (r'/api/v1/notes/(\d+)', 'note'),
+                (r'/api/v1/ideas/(\d+)', 'idea'),
+                (r'/api/v1/backups/(\d+)', 'backup'),
+                (r'/api/v1/draft/(\d+)', 'draft'),
+                (r'/api/v1/brief/(\d+)', 'brief'),
+            ]
+
+            for pattern, resource_type in resource_patterns:
+                match = re.match(pattern, path)
+                if match:
+                    resource_id = int(match.group(1))
+
+                    # Track IDOR attempt
+                    alert = track_idor_attempt(
+                        user_id=user_id,
+                        ip_address=ip_address,
+                        resource_type=resource_type,
+                        resource_id=resource_id,
+                        endpoint=path
+                    )
+
+                    if alert:
+                        # Alert triggered - log critical warning
+                        logger.critical(
+                            f"IDOR PROBING ALERT: {alert.description} "
+                            f"[user_id={user_id}, ip={ip_address}]"
+                        )
+
+                        # Optional: Send notification
+                        from utils.security_monitor import send_alert_notification
+                        send_alert_notification(alert)
+
+                    break
+
+            # Track 429 responses (rate limit violations)
+            elif response.status_code == 429:
+            # Extract rate limit from response headers or set default
+            rate_limit = response.headers.get("x-ratelimit-limit", "unknown")
+
+            alert = track_rate_limit_violation(
+                user_id=user_id,
+                ip_address=ip_address,
+                endpoint=request.url.path,
+                limit=rate_limit
+            )
+
+            if alert:
+                logger.critical(
+                    f"RATE LIMIT ABUSE ALERT: {alert.description} "
+                    f"[user_id={user_id}, ip={ip_address}]"
+                )
+
+                # Optional: Send notification
+                from utils.security_monitor import send_alert_notification
+                send_alert_notification(alert)
+
+            return response
